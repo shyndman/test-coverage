@@ -9,6 +9,7 @@ import 'package:coverage/coverage.dart' as coverage;
 import 'package:glob/glob.dart';
 import 'package:lcov/lcov.dart';
 import 'package:path/path.dart' as path;
+import 'package:pedantic/pedantic.dart';
 
 final _sep = path.separator;
 
@@ -85,8 +86,13 @@ Future<void> runTestsAndCollect(String packageRoot, String port) async {
 
   final process =
       await Process.start('dart', dartArgs, workingDirectory: packageRoot);
+  final processStdout = process.stdout.asBroadcastStream();
+
+  unawaited(stdout.addStream(processStdout));
+  unawaited(stderr.addStream(process.stderr));
+
   final serviceUriCompleter = Completer<Uri>();
-  process.stdout
+  processStdout
       .transform(utf8.decoder)
       .transform(const LineSplitter())
       .listen((line) {
@@ -109,12 +115,8 @@ Future<void> runTestsAndCollect(String packageRoot, String port) async {
   }
 
   Map<String, Map<int, int>> hitmap;
-  try {
-    final data = await coverage.collect(serviceUri, true, true, false, {});
-    hitmap = coverage.createHitmap(data['coverage']);
-  } finally {
-    await process.stderr.drain<List<int>>();
-  }
+  final data = await coverage.collect(serviceUri, true, true, false, {});
+  hitmap = coverage.createHitmap(data['coverage']);
   final exitStatus = await process.exitCode;
   if (exitStatus != 0) {
     throw 'Tests failed with exit code $exitStatus';
